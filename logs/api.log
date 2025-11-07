@@ -1,0 +1,24 @@
+{"timestamp":"2025-11-06 22:52:46","level":"info","apiKey":"System","message":"Servidor API V8 (PROD) iniciado en http://localhost:3000"}
+{"timestamp":"2025-11-06 22:53:52","level":"info","apiKey":"System","message":"Un cliente web se ha conectado al panel."}
+{"timestamp":"2025-11-06 22:54:02","level":"info","apiKey":"System","message":"Solicitud de creación para nueva apiKey: 95b2c413a33fb0e8abe4de86dd3ba377f3aef18a"}
+{"timestamp":"2025-11-06 22:54:02","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Iniciando sesión..."}
+{"timestamp":"2025-11-06 22:54:05","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"QR generado. Esperando escaneo."}
+{"timestamp":"2025-11-06 22:54:22","level":"warn","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Conexión perdida (Razón: 515). Reintentando en 10s..."}
+{"timestamp":"2025-11-06 22:54:32","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Reintento de conexión 1/3..."}
+{"timestamp":"2025-11-06 22:54:39","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"¡Sesión conectada exitosamente!"}
+{"timestamp":"2025-11-06 22:59:59","level":"warn","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Conexión perdida (Razón: 503). Reintentando en 10s..."}
+{"timestamp":"2025-11-06 23:00:09","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Reintento de conexión 1/3..."}
+{"timestamp":"2025-11-06 23:00:12","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"¡Sesión conectada exitosamente!"}
+{"timestamp":"2025-11-06 23:00:22","level":"info","apiKey":"System","message":"Un cliente web se desconectó."}
+{"timestamp":"2025-11-06 23:14:56","level":"warn","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Conexión perdida (Razón: 503). Reintentando en 10s..."}
+{"timestamp":"2025-11-06 23:15:06","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Reintento de conexión 1/3..."}
+{"timestamp":"2025-11-06 23:15:09","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"¡Sesión conectada exitosamente!"}
+{"timestamp":"2025-11-06 23:18:19","level":"info","apiKey":"System","message":"Un cliente web se ha conectado al panel."}
+{"timestamp":"2025-11-06 23:27:25","level":"info","apiKey":"System","message":"Un cliente web se desconectó."}
+{"timestamp":"2025-11-06 23:29:53","level":"info","apiKey":"System","message":"Un cliente web se ha conectado al panel."}
+{"timestamp":"2025-11-06 23:38:08","level":"info","apiKey":"System","message":"Un cliente web se desconectó."}
+{"timestamp":"2025-11-07 01:22:32","level":"warn","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Conexión perdida (Razón: 428). Reintentando en 10s..."}
+{"timestamp":"2025-11-07 01:22:42","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Reintento de conexión 1/3..."}
+{"timestamp":"2025-11-07 09:50:41","level":"warn","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Conexión perdida (Razón: 408). Reintentando en 10s..."}
+{"timestamp":"2025-11-07 09:50:51","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"Reintento de conexión 2/3..."}
+{"timestamp":"2025-11-07 09:51:15","level":"info","apiKey":"95b2c413a33fb0e8abe4de86dd3ba377f3aef18a","message":"¡Sesión conectada exitosamente!"}

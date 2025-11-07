@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Control API WhatsApp</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root { --blue: #007bff; --green: #28a745; --red: #dc3545; --yellow: #ffc107; --grey: #6c757d; --lightgrey: #f8f9fa; --dark: #343a40; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: var(--dark); }
+        .main-container { max-width: 1200px; margin: 20px auto; display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        .panel { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        h1, h2 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .form-container { margin-bottom: 20px; }
+        button { padding: 10px 15px; border: none; border-radius: 4px; background: var(--blue); color: white; cursor: pointer; font-size: 16px; transition: background 0.2s; }
+        button:hover { background: #0056b3; }
+        button.danger { background: var(--red); }
+        button.danger:hover { background: #c82333; }
+        button.warning { background: var(--yellow); color: #333; }
+        button.warning:hover { background: #e0a800; }
+        button.test-btn { background: var(--green); font-size: 12px; padding: 8px 10px; margin-top: 10px; }
+        button.test-btn:hover { background: #218838; }
+        input[type="text"], input[type="tel"] { width: calc(100% - 22px); padding: 10px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px; }
+
+        .session-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        .session { border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: var(--lightgrey); display: flex; flex-direction: column; }
+        .session h3 { margin: 0 0 10px 0; font-size: 14px; font-family: 'Courier New', Courier, monospace; word-wrap: break-word; background: #eee; padding: 8px; border-radius: 4px; }
+        .session .status { font-weight: bold; padding: 5px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
+        .status.connected { background: var(--green); color: white; }
+        .status.scantime { background: var(--yellow); color: #333; }
+        .status.disconnected, .status.loggedout, .status.failed { background: var(--red); color: white; }
+        .qr-code { max-width: 100%; height: auto; margin: 0 auto 10px auto; display: block; }
+        .session-footer { margin-top: auto; }
+        .session-actions { display: flex; gap: 10px; }
+        .test-form { border-top: 1px solid #ddd; padding-top: 10px; margin-top: 10px; }
+        
+        #logs-panel { height: 600px; display: flex; flex-direction: column; }
+        #logsContainer { background: var(--dark); color: var(--lightgrey); padding: 15px; border-radius: 4px; overflow-y: scroll; flex: 1; font-family: 'Courier New', Courier, monospace; font-size: 13px; }
+        #logsContainer p { margin: 0 0 5px 0; padding: 0; line-height: 1.4; border-bottom: 1px solid #444; }
+        #logsContainer p:last-child { border-bottom: none; }
+        #logsContainer p.info { color: white; }
+        #logsContainer p.warn { color: var(--yellow); }
+        #logsContainer p.error { color: var(--red); }
+        #logsContainer p.success { color: var(--green); } /* Para estado de mensajes */
+        .api-key-container { display: flex; gap: 5px; align-items: center; }
+        .api-key-container button { font-size: 12px; padding: 8px 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="panel">
+            <h1>Panel de Sesiones</h1>
+            <div class="form-container">
+                <button id="createBtn">Crear Nueva Sesión</button>
+            </div>
+            <div class="session-list" id="sessionList">
+                </div>
+        </div>
+
+        <div class="panel" id="logs-panel">
+            <h2>Logs en Tiempo Real</h2>
+            <div id="logsContainer">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io(); // El login ya fue manejado por el navegador
+        const sessionList = document.getElementById('sessionList');
+        const createBtn = document.getElementById('createBtn');
+        const logsContainer = document.getElementById('logsContainer');
+        const masterApiKey = 'tu-clave-maestra-aqui'; // <-- ¡IMPORTANTE!
+
+        function renderSession(session) {
+            let existingCard = document.getElementById(session.apiKey);
+            if (!existingCard) {
+                existingCard = document.createElement('div');
+                existingCard.className = 'session';
+                existingCard.id = session.apiKey;
+                sessionList.appendChild(existingCard);
+            }
+
+            if (session.status === 'deleted') {
+                existingCard.remove();
+                return;
+            }
+
+            let statusColor = session.status.toLowerCase().replace('_', '');
+            let qrHtml = '';
+            if (session.status === 'scantime' && session.qr) {
+                qrHtml = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(session.qr)}" alt="Escanea el QR" class="qr-code">`;
+            }
+            
+            let actionsHtml = `<button class="danger" onclick="deleteSession('${session.apiKey}')">Borrar</button>`;
+            if (session.status === 'loggedOut' || session.status === 'failed') {
+                actionsHtml += `<button class="warning" onclick="restartSession('${session.apiKey}')">Reconectar</button>`;
+            }
+
+            existingCard.innerHTML = `
+                <div class="api-key-container">
+                    <h3 title="${session.apiKey}">${session.apiKey.substring(0, 10)}...</h3>
+                    <button onclick="copyToClipboard('${session.apiKey}')">Copiar</button>
+                </div>
+                <span class="status ${statusColor}">${session.status.toUpperCase()}</span>
+                ${qrHtml}
+                
+                <div class="session-footer">
+                    <div class="test-form">
+                        <input type="tel" id="test_num_${session.apiKey}" placeholder="58412XXXXXXX">
+                        <input type="text" id="test_msg_${session.apiKey}" placeholder="Mensaje de prueba">
+                        <button class="test-btn" onclick="sendTestMessage('${session.apiKey}')">Test Enviar</button>
+                    </div>
+                    <br>
+                    <div class="session-actions">
+                        ${actionsHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function addLog(log) {
+            const logEl = document.createElement('p');
+            logEl.className = log.level;
+            logEl.textContent = `[${log.timestamp.split(' ')[1]}] [${log.apiKey}] ${log.message}`;
+            logsContainer.appendChild(logEl);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        // --- Eventos de Socket.io ---
+        socket.on('log_history', (logs) => {
+            logsContainer.innerHTML = '';
+            logs.forEach(addLog);
+        });
+
+        socket.on('initial_status', (sessions) => {
+            sessionList.innerHTML = '';
+            sessions.forEach(renderSession);
+        });
+
+        socket.on('session_update', (session) => {
+            renderSession(session);
+        });
+
+        socket.on('log_message', (log) => {
+            addLog(log);
+        });
+        
+        // --- ¡NUEVO LISTENER PARA EL ESTADO DEL MENSAJE! ---
+        socket.on('message_status_update', (data) => {
+            let level, msg;
+            if (data.status === 'SUCCESS') {
+                level = 'success';
+                msg = `Mensaje [${data.tracking_id.substring(0, 8)}] enviado.`;
+            } else {
+                level = 'error';
+                msg = `Mensaje [${data.tracking_id.substring(0, 8)}] FALLÓ: ${data.error}`;
+            }
+            // Lo mostramos como un log del sistema
+            addLog({
+                timestamp: new Date().toLocaleString('sv-SE'),
+                level: level,
+                apiKey: 'System',
+                message: msg
+            });
+        });
+
+        // --- Acciones del Cliente (con Clave Maestra) ---
+        // ¡Importante! Reemplaza 'tu-clave-maestra-aqui' por tu clave real
+        // para que el panel pueda hablar con la API.
+        const API_HEADERS = {
+            'Content-Type': 'application/json',
+            'X-API-KEY': prompt('Introduce la Clave Maestra de la API para usar el panel', '')
+        };
+
+        createBtn.onclick = () => {
+            fetch('/api/create-session', {
+                method: 'POST',
+                headers: API_HEADERS
+            });
+        };
+
+        function deleteSession(apiKey) {
+            if (confirm(`¿Seguro que quieres borrar la sesión '${apiKey}'?`)) {
+                fetch(`/api/close-session/${apiKey}`, {
+                    method: 'DELETE',
+                    headers: API_HEADERS
+                });
+            }
+        }
+        
+        function restartSession(apiKey) {
+            if (confirm(`¿Forzar reinicio para '${apiKey}'?\nEsto generará un nuevo QR.`)) {
+                fetch(`/api/sessions/restart/${apiKey}`, {
+                    method: 'POST',
+                    headers: API_HEADERS
+                });
+            }
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('¡API Key copiada!');
+            });
+        }
+
+        function sendTestMessage(apiKey) {
+            const number = document.getElementById(`test_num_${apiKey}`).value;
+            const message = document.getElementById(`test_msg_${apiKey}`).value;
+            if (!number || !message) {
+                alert('Número y mensaje son obligatorios.');
+                return;
+            }
+            
+            fetch(`/api/send-message/${apiKey}`, {
+                method: 'POST',
+                headers: API_HEADERS,
+                body: JSON.stringify({ number, message })
+            });
+        }
+    </script>
+</body>
+</html>

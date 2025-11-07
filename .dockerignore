@@ -1,0 +1,7 @@
+# .dockerignore
+node_modules/
+sessions/
+logs/ # <-- AÑADIR ESTA LÍNEA
+*.log
+npm-debug.log
+docker-debug.log

@@ -1,0 +1,19 @@
+# docker-compose.yml
+services:
+  api:
+    build: .
+    container_name: whatsapp_api_v8
+    ports:
+      - "3000:3000"
+
+    # Carga las variables de entorno desde el archivo .env
+    env_file: .env
+
+    volumes:
+      # Mapea las sesiones para que sobrevivan reinicios
+      - ./sessions:/usr/src/app/sessions
+      # Mapea los logs para que sobrevivan reinicios
+      - ./logs:/usr/src/app/logs
+
+    # Reinicia automáticamente si falla
+    restart: always
