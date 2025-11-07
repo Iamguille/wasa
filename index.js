@@ -1,24 +1,22 @@
 // index.js
-require('dotenv').config(); // <-- Carga el .env
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const crypto = require('crypto');
-const basicAuth = require('express-basic-auth'); // <-- Importa el login
-const cors = require('cors'); // <-- NECESARIO: Permite peticiones de otros dominios
+const basicAuth = require('express-basic-auth');
+const cors = require('cors');
 const sessionManager = require('./sessionManager');
 const logger = require('./logger');
 
 const app = express();
 const server = http.createServer(app);
 
-// --- CONFIGURACIÓN CORS PARA SOCKET.IO (ABIERTO A TODOS) ---
-// 'origin: true' permite que cualquier dominio se conecte y refleje su origen
-// Esto es necesario cuando 'credentials: true' está activado.
+// --- CONFIGURACIÓN CORS PARA SOCKET.IO ---
 const io = new Server(server, {
   cors: {
-    origin: true, 
+    origin: true, // Permite cualquier origen y lo refleja (necesario para credentials)
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -26,9 +24,9 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
-// --- Verificación de Secretos (Mejor Práctica) ---
+// --- Verificación de Secretos ---
 if (!process.env.MASTER_KEY || !process.env.PANEL_USER || !process.env.PANEL_PASSWORD) {
-  console.error('ERROR FATAL: Faltan variables de entorno (MASTER_KEY, PANEL_USER, PANEL_PASSWORD) en el archivo .env');
+  console.error('ERROR FATAL: Faltan variables de entorno en .env');
   process.exit(1);
 }
 
@@ -36,38 +34,33 @@ logger.setSocket(io);
 
 // --- Middleware Globales ---
 app.use(express.json());
-// Configuración CORS global para la API REST
 app.use(cors({
   origin: true,
   credentials: true
 }));
 
-// --- 1. Middleware de Seguridad para la API ---
+// --- 1. Middleware de Seguridad para la API REST ---
 const masterKeyAuth = (req, res, next) => {
   const providedKey = req.headers['x-api-key'];
   if (!providedKey || providedKey !== process.env.MASTER_KEY) {
-    // logger.warn('System', `Intento de acceso a la API RECHAZADO`); // Comentado para menos ruido
     return res.status(401).json({ success: false, error: 'No autorizado' });
   }
   next();
 };
 
-// --- 2. Middleware de Seguridad para el Panel Web (Login HTML) ---
+// --- 2. Middleware de Seguridad para el Panel Web (Navegador) ---
 const panelAuth = basicAuth({
   users: { [process.env.PANEL_USER]: process.env.PANEL_PASSWORD },
   challenge: true,
   realm: 'PanelDeControl',
 });
 
-
-// --- Servir la Interfaz Web (Protegida) ---
+// --- Servir la Interfaz Web ---
 app.get('/', panelAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// --- API Endpoints (Protegidos y con prefijo /api) ---
-
-// Todas las rutas /api/* requieren la Clave Maestra
+// --- API Endpoints ---
 const apiRouter = express.Router();
 apiRouter.use(masterKeyAuth);
 
@@ -76,11 +69,7 @@ apiRouter.post('/create-session', async (req, res) => {
     const apiKey = crypto.randomBytes(20).toString('hex');
     logger.info('System', `Solicitud de creación para nueva apiKey: ${apiKey}`);
     await sessionManager.startSession(apiKey, io, 0);
-    res.status(202).json({
-      success: true,
-      apiKey: apiKey,
-      message: 'Solicitud de sesión encolada. Consulte el estado.',
-    });
+    res.status(202).json({ success: true, apiKey, message: 'Solicitud de sesión encolada.' });
   } catch (error) {
     logger.error('System', 'Error al crear sesión', error);
     res.status(500).json({ success: false, error: error.message });
@@ -88,23 +77,19 @@ apiRouter.post('/create-session', async (req, res) => {
 });
 
 apiRouter.post('/sessions/restart/:apiKey', async (req, res) => {
-  const { apiKey } = req.params;
   try {
-    logger.info(apiKey, 'Solicitud de reinicio manual recibida.');
-    await sessionManager.restartSession(apiKey, io);
-    res.status(200).json({ success: true, message: 'Reiniciando sesión. Escanee el nuevo QR.' });
+    logger.info(req.params.apiKey, 'Solicitud de reinicio manual recibida.');
+    await sessionManager.restartSession(req.params.apiKey, io);
+    res.status(200).json({ success: true, message: 'Reiniciando sesión...' });
   } catch (error) {
-    logger.error(apiKey, 'Error al reiniciar sesión', error);
+    logger.error(req.params.apiKey, 'Error al reiniciar sesión', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 apiRouter.get('/session-status/:apiKey', (req, res) => {
-  const { apiKey } = req.params;
-  const session = sessionManager.getSession(apiKey);
-  if (!session) {
-    return res.status(404).json({ success: false, error: 'Sesión no encontrada.' });
-  }
+  const session = sessionManager.getSession(req.params.apiKey);
+  if (!session) return res.status(404).json({ success: false, error: 'Sesión no encontrada.' });
   res.status(200).json({
     success: true,
     status: session.status,
@@ -114,129 +99,91 @@ apiRouter.get('/session-status/:apiKey', (req, res) => {
 });
 
 apiRouter.delete('/close-session/:apiKey', async (req, res) => {
-  const { apiKey } = req.params;
   try {
-    const result = await sessionManager.deleteSession(apiKey, io);
+    const result = await sessionManager.deleteSession(req.params.apiKey, io);
     res.status(200).json(result);
   } catch (error) {
-    logger.error(apiKey, 'Error al cerrar sesión', error);
+    logger.error(req.params.apiKey, 'Error al cerrar sesión', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 const checkSession = (req, res, next) => {
-  const { apiKey } = req.params;
-  const session = sessionManager.getSession(apiKey);
+  const session = sessionManager.getSession(req.params.apiKey);
   if (!session || session.status !== 'connected') {
-    // logger.warn(apiKey, `Intento de envío fallido (Sesión no conectada)`); // Comentado para menos ruido
-    return res.status(409).json({
-      success: false,
-      error: 'La sesión no está conectada.',
-      status: session?.status || 'notFound',
-    });
+    return res.status(409).json({ success: false, error: 'Sesión no conectada.', status: session?.status || 'notFound' });
   }
   req.session = session;
   next();
 };
 
-// --- Rutas de envío con TRACKING_ID ---
-
+// --- Rutas de envío ---
 apiRouter.post('/send-message/:apiKey', checkSession, async (req, res) => {
-  const { apiKey } = req.params;
   const { number, message } = req.body;
-  if (!number || !message) {
-    return res.status(400).json({ success: false, error: 'Número y mensaje obligatorios.' });
-  }
+  if (!number || !message) return res.status(400).json({ success: false, error: 'Faltan datos.' });
   try {
-    const tracking_id = crypto.randomUUID(); // Genera ID único
-    sessionManager.sendTrackedMessage(apiKey, number, message, tracking_id, io);
-    res.status(202).json({ 
-      success: true, 
-      message: 'Mensaje encolado.',
-      tracking_id: tracking_id // Devuelve el ID a tu CRM
-    });
+    const tracking_id = crypto.randomUUID();
+    sessionManager.sendTrackedMessage(req.params.apiKey, number, message, tracking_id, io);
+    res.status(202).json({ success: true, message: 'Mensaje encolado.', tracking_id });
   } catch (error) {
-    logger.error(apiKey, 'Error en API /send-message', error);
+    logger.error(req.params.apiKey, 'Error en /send-message', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 apiRouter.post('/send-pdf/:apiKey', checkSession, async (req, res) => {
-  const { apiKey } = req.params;
   const { number, url, caption } = req.body;
-  if (!number || !url) {
-    return res.status(400).json({ success: false, error: 'Número y URL obligatorios.' });
-  }
+  if (!number || !url) return res.status(400).json({ success: false, error: 'Faltan datos.' });
   try {
     const tracking_id = crypto.randomUUID();
-    sessionManager.sendTrackedMedia(apiKey, number, url, caption, 'pdf', tracking_id, io);
-    res.status(202).json({ 
-      success: true, 
-      message: 'PDF encolado.',
-      tracking_id: tracking_id
-    });
+    sessionManager.sendTrackedMedia(req.params.apiKey, number, url, caption, 'pdf', tracking_id, io);
+    res.status(202).json({ success: true, message: 'PDF encolado.', tracking_id });
   } catch (error) {
-    logger.error(apiKey, 'Error en API /send-pdf', error);
+    logger.error(req.params.apiKey, 'Error en /send-pdf', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 apiRouter.post('/send-image/:apiKey', checkSession, async (req, res) => {
-  const { apiKey } = req.params;
   const { number, url, caption } = req.body;
-  if (!number || !url) {
-    return res.status(400).json({ success: false, error: 'Número y URL obligatorios.' });
-  }
+  if (!number || !url) return res.status(400).json({ success: false, error: 'Faltan datos.' });
   try {
     const tracking_id = crypto.randomUUID();
-    sessionManager.sendTrackedMedia(apiKey, number, url, caption, 'image', tracking_id, io);
-    res.status(202).json({ 
-      success: true, 
-      message: 'Imagen encolada.',
-      tracking_id: tracking_id
-    });
+    sessionManager.sendTrackedMedia(req.params.apiKey, number, url, caption, 'image', tracking_id, io);
+    res.status(202).json({ success: true, message: 'Imagen encolada.', tracking_id });
   } catch (error) {
-    logger.error(apiKey, 'Error en API /send-image', error);
+    logger.error(req.params.apiKey, 'Error en /send-image', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Registrar el router de la API
 app.use('/api', apiRouter);
 
-
-// --- Lógica de Autenticación Socket.io (ROBUSTA) ---
-// Esta versión NO usa 'express-basic-auth' aquí para evitar crashes
-// cuando el cliente no envía headers HTTP estándar.
+// --- Lógica de Autenticación Socket.io (ROBUSTA - SIN CRASH) ---
 io.use((socket, next) => {
   const auth = socket.handshake.auth;
-  // Opción 1: Credenciales enviadas en el objeto 'auth' de Socket.IO (recomendado)
+  // 1. Revisar si el cliente envió credenciales explícitas (como hace tu CRM)
   if (auth && auth.username === process.env.PANEL_USER && auth.password === process.env.PANEL_PASSWORD) {
     return next();
   }
   
-  // Opción 2 (Opcional): Permitir conexión sin autenticación si viene de un origen de confianza
-  // Esto es útil si tu CRM no puede enviar usuario/contraseña fácilmente.
-  // Descomenta si lo necesitas y sabes que tu origen es seguro:
-  /*
-  const origin = socket.handshake.headers.origin;
-  if (origin === 'https://renacer.metaflixstore.com') {
-      return next();
+  // 2. Revisar si el navegador envió la cabecera estándar Basic Auth
+  const header = socket.handshake.headers.authorization;
+  if (header && header.startsWith('Basic ')) {
+    const parts = Buffer.from(header.split(' ')[1], 'base64').toString().split(':');
+    if (parts[0] === process.env.PANEL_USER && parts[1] === process.env.PANEL_PASSWORD) {
+        return next();
+    }
   }
-  */
 
-  // Si falla la autenticación, rechazamos limpiamente sin crashear
+  // Si falla, rechazamos sin intentar usar 'res' (evita el crash TypeError)
   next(new Error("Authentication error"));
 });
 
 io.on('connection', (socket) => {
-  // logger.info('System', 'Cliente conectado al socket.'); // Log opcional
+  // logger.info('System', 'Cliente conectado al socket.');
   socket.emit('log_history', logger.getHistory());
   socket.emit('initial_status', sessionManager.getAllSessionStatuses());
-  
-  socket.on('disconnect', () => {
-    // logger.info('System', 'Cliente desconectado del socket.');
-  });
 });
 
 // --- Iniciar Servidor ---
