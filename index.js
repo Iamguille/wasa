@@ -16,7 +16,7 @@ const server = http.createServer(app);
 // --- CONFIGURACIÓN CORS PARA SOCKET.IO (ABIERTO A TODOS) ---
 const io = new Server(server, {
   cors: {
-    origin: "*", // <-- Permite conexión desde CUALQUIER dominio
+    origin: "true", // <-- Permite conexión desde CUALQUIER dominio
     methods: ["GET", "POST"]
   }
 });
