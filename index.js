@@ -6,7 +6,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const crypto = require('crypto');
 const basicAuth = require('express-basic-auth'); // <-- Importa el login
-const cors = require('cors'); // <-- NECESARIO PARA PERMITIR OTROS DOMINIOS
+const cors = require('cors'); // <-- NECESARIO: Permite peticiones de otros dominios
 const sessionManager = require('./sessionManager');
 const logger = require('./logger');
 
@@ -14,9 +14,11 @@ const app = express();
 const server = http.createServer(app);
 
 // --- CONFIGURACIÓN CORS PARA SOCKET.IO (ABIERTO A TODOS) ---
+// 'origin: true' permite que cualquier dominio se conecte y refleje su origen
+// Esto es necesario cuando 'credentials: true' está activado.
 const io = new Server(server, {
   cors: {
-    origin: true,  // <--- CAMBIO CLAVE SI "*" FALLA
+    origin: true, 
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -34,23 +36,23 @@ logger.setSocket(io);
 
 // --- Middleware Globales ---
 app.use(express.json());
-// Configuración CORS global para todas las rutas de Express (API REST)
+// Configuración CORS global para la API REST
 app.use(cors({
-  origin: true, // <--- AQUÍ TAMBIÉN
+  origin: true,
   credentials: true
-})); // <-- Al no poner opciones, permite todo (*) por defecto
+}));
 
 // --- 1. Middleware de Seguridad para la API ---
 const masterKeyAuth = (req, res, next) => {
   const providedKey = req.headers['x-api-key'];
   if (!providedKey || providedKey !== process.env.MASTER_KEY) {
-    logger.warn('System', `Intento de acceso a la API RECHAZADO (Clave: ${providedKey || 'ninguna'})`);
+    // logger.warn('System', `Intento de acceso a la API RECHAZADO`); // Comentado para menos ruido
     return res.status(401).json({ success: false, error: 'No autorizado' });
   }
   next();
 };
 
-// --- 2. Middleware de Seguridad para el Panel Web (Login) ---
+// --- 2. Middleware de Seguridad para el Panel Web (Login HTML) ---
 const panelAuth = basicAuth({
   users: { [process.env.PANEL_USER]: process.env.PANEL_PASSWORD },
   challenge: true,
@@ -126,7 +128,7 @@ const checkSession = (req, res, next) => {
   const { apiKey } = req.params;
   const session = sessionManager.getSession(apiKey);
   if (!session || session.status !== 'connected') {
-    logger.warn(apiKey, `Intento de envío fallido (Sesión no conectada). Estado: ${session?.status}`);
+    // logger.warn(apiKey, `Intento de envío fallido (Sesión no conectada)`); // Comentado para menos ruido
     return res.status(409).json({
       success: false,
       error: 'La sesión no está conectada.',
@@ -203,28 +205,42 @@ apiRouter.post('/send-image/:apiKey', checkSession, async (req, res) => {
 app.use('/api', apiRouter);
 
 
-// --- Lógica de Socket.io (Protegida) ---
-// Protege el handshake de Socket.IO con la misma autenticación del panel
+// --- Lógica de Autenticación Socket.io (ROBUSTA) ---
+// Esta versión NO usa 'express-basic-auth' aquí para evitar crashes
+// cuando el cliente no envía headers HTTP estándar.
 io.use((socket, next) => {
-  // NOTA: Si quieres que CUALQUIER dominio se conecte al socket sin login
-  // (ej. para solo recibir estados públicos), deberías comentar la siguiente línea.
-  // Pero para mantener el panel seguro, es mejor dejarlo.
-  // Los clientes externos que no sean el panel usualmente no se conectan al socket
-  // a menos que también les des usuario/pass.
-  panelAuth(socket.request, socket.request.res, next);
+  const auth = socket.handshake.auth;
+  // Opción 1: Credenciales enviadas en el objeto 'auth' de Socket.IO (recomendado)
+  if (auth && auth.username === process.env.PANEL_USER && auth.password === process.env.PANEL_PASSWORD) {
+    return next();
+  }
+  
+  // Opción 2 (Opcional): Permitir conexión sin autenticación si viene de un origen de confianza
+  // Esto es útil si tu CRM no puede enviar usuario/contraseña fácilmente.
+  // Descomenta si lo necesitas y sabes que tu origen es seguro:
+  /*
+  const origin = socket.handshake.headers.origin;
+  if (origin === 'https://renacer.metaflixstore.com') {
+      return next();
+  }
+  */
+
+  // Si falla la autenticación, rechazamos limpiamente sin crashear
+  next(new Error("Authentication error"));
 });
 
 io.on('connection', (socket) => {
-  logger.info('System', 'Un cliente web se ha conectado al panel.');
+  // logger.info('System', 'Cliente conectado al socket.'); // Log opcional
   socket.emit('log_history', logger.getHistory());
   socket.emit('initial_status', sessionManager.getAllSessionStatuses());
+  
   socket.on('disconnect', () => {
-    logger.info('System', 'Un cliente web se desconectó.');
+    // logger.info('System', 'Cliente desconectado del socket.');
   });
 });
 
 // --- Iniciar Servidor ---
 server.listen(PORT, () => {
-  logger.info('System', `Servidor API V8 (PROo) iniciado en http://localhost:${PORT}`);
+  logger.info('System', `Servidor API V8 (PROD) iniciado en http://localhost:${PORT}`);
   sessionManager.loadExistingSessions(io);
 });
