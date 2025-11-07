@@ -6,12 +6,21 @@ const { Server } = require('socket.io');
 const path = require('path');
 const crypto = require('crypto');
 const basicAuth = require('express-basic-auth'); // <-- Importa el login
+const cors = require('cors'); // <-- NECESARIO PARA PERMITIR OTROS DOMINIOS
 const sessionManager = require('./sessionManager');
 const logger = require('./logger');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+
+// --- CONFIGURACIÓN CORS PARA SOCKET.IO (ABIERTO A TODOS) ---
+const io = new Server(server, {
+  cors: {
+    origin: "*", // <-- Permite conexión desde CUALQUIER dominio
+    methods: ["GET", "POST"]
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 // --- Verificación de Secretos (Mejor Práctica) ---
@@ -21,7 +30,11 @@ if (!process.env.MASTER_KEY || !process.env.PANEL_USER || !process.env.PANEL_PAS
 }
 
 logger.setSocket(io);
+
+// --- Middleware Globales ---
 app.use(express.json());
+// Configuración CORS global para todas las rutas de Express (API REST)
+app.use(cors()); // <-- Al no poner opciones, permite todo (*) por defecto
 
 // --- 1. Middleware de Seguridad para la API ---
 const masterKeyAuth = (req, res, next) => {
@@ -189,6 +202,11 @@ app.use('/api', apiRouter);
 // --- Lógica de Socket.io (Protegida) ---
 // Protege el handshake de Socket.IO con la misma autenticación del panel
 io.use((socket, next) => {
+  // NOTA: Si quieres que CUALQUIER dominio se conecte al socket sin login
+  // (ej. para solo recibir estados públicos), deberías comentar la siguiente línea.
+  // Pero para mantener el panel seguro, es mejor dejarlo.
+  // Los clientes externos que no sean el panel usualmente no se conectan al socket
+  // a menos que también les des usuario/pass.
   panelAuth(socket.request, socket.request.res, next);
 });
 
@@ -203,6 +221,6 @@ io.on('connection', (socket) => {
 
 // --- Iniciar Servidor ---
 server.listen(PORT, () => {
-  logger.info('System', `Servidor API V8 (PROD) iniciado en http://localhost:${PORT}`);
+  logger.info('System', `Servidor API V8 (PRO) iniciado en http://localhost:${PORT}`);
   sessionManager.loadExistingSessions(io);
 });
