@@ -221,6 +221,6 @@ io.on('connection', (socket) => {
 
 // --- Iniciar Servidor ---
 server.listen(PORT, () => {
-  logger.info('System', `Servidor API V8 (PRO) iniciado en http://localhost:${PORT}`);
+  logger.info('System', `Servidor API V8 (PROo) iniciado en http://localhost:${PORT}`);
   sessionManager.loadExistingSessions(io);
 });
