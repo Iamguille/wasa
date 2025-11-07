@@ -16,8 +16,9 @@ const server = http.createServer(app);
 // --- CONFIGURACIÓN CORS PARA SOCKET.IO (ABIERTO A TODOS) ---
 const io = new Server(server, {
   cors: {
-    origin: "true", // <-- Permite conexión desde CUALQUIER dominio
-    methods: ["GET", "POST"]
+    origin: true,  // <--- CAMBIO CLAVE SI "*" FALLA
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -34,7 +35,10 @@ logger.setSocket(io);
 // --- Middleware Globales ---
 app.use(express.json());
 // Configuración CORS global para todas las rutas de Express (API REST)
-app.use(cors()); // <-- Al no poner opciones, permite todo (*) por defecto
+app.use(cors({
+  origin: true, // <--- AQUÍ TAMBIÉN
+  credentials: true
+})); // <-- Al no poner opciones, permite todo (*) por defecto
 
 // --- 1. Middleware de Seguridad para la API ---
 const masterKeyAuth = (req, res, next) => {
